@@ -90,7 +90,7 @@ const sb=supabase.createClient(SB_URL,SB_KEY);
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const S={profile:null,accounts:[],categories:[],tx:[],debts:[],pays:[],budgets:[],goals:[]};
-let U=null,view='home',sub='reports',month=new Date(),dispCur='SYP',hide=false,txFilter='all',debtTab='owed_to_me',charts=[],authMode='in';
+let U=null,view='home',sub='reports',month=new Date(),dispCur='SYP',hide=false,txFilter='all',txAll=false,txFrom='',txTo='',debtTab='owed_to_me',charts=[],authMode='in';
 const MONTHS=['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
 const DEF_CATS=[['الأكل بالخارج','🍽️','#e9823a'],['المواصلات','🚌','#4f7fe0'],['الصحة','💚','#3aa981'],['القهوة والكافيه','☕','#d2a22c'],['تسوق من الإنترنت','🛒','#7cb342'],['اشتراكات','💳','#39a0c9'],['مصاريف عائلية','👨‍👩‍👧','#7a6fe0'],['رصيد الهاتف','📱','#4a9be0'],['شراء الملابس','👕','#35b06f'],['العمولات والضرائب','％','#8a8f98'],['إيجار','🏠','#8a63d6'],['فواتير','🧾','#d8589a'],['حلاقة شعر','✂️','#46b477'],['أخرى','⋯','#8a8f98']];
 const DEF_INC=[['راتب','💼','#1c8a57'],['عمل حر','🎨','#0f6b63'],['هدية','🎁','#d8589a'],['أخرى','⋯','#8a8f98']];
@@ -166,11 +166,13 @@ function txRow(t){
   return`<button class="card item" data-act="editTx" data-id="${t.id}"><i style="background:${esc(c?.color||'#8a8f98')}22">${esc(c?.icon||'•')}</i><div><span>${esc(t.note||c?.name||(t.kind==='income'?'دخل':'مصروف'))}</span><small>${t.occurred_on} • ${esc(a?.name)}${c?' • '+esc(c.name):''}${t.source==='telegram'?' • تلغرام':''}</small></div><b class="${t.kind==='income'?'in':'out'}">${t.kind==='income'?'+':'−'}${fmt(t.amount)} ${a?.currency||''}</b></button>`;
 }
 function vTx(){
-  const list=monthTx().filter(t=>txFilter==='all'||t.kind===txFilter);
-  return`<h2>العمليات <span style="font-size:14px;color:var(--mut)">${MONTHS[month.getMonth()]} ${month.getFullYear()}</span></h2>
-  <div class="card mon"><button data-act="prevM" aria-label="الشهر السابق">›</button><b>${list.length} عملية</b><button data-act="nextM" aria-label="الشهر التالي">‹</button></div>
+  const base=txAll?S.tx.filter(t=>(!txFrom||t.occurred_on>=txFrom)&&(!txTo||t.occurred_on<=txTo)):monthTx(),list=base.filter(t=>txFilter==='all'||t.kind===txFilter);
+  return`<h2>العمليات <span style="font-size:14px;color:var(--mut)">${txAll?'كل الفترات':MONTHS[month.getMonth()]+' '+month.getFullYear()}</span></h2>
+  <div class="chips"><button class="chip${txAll?'':' on'}" data-act="txAll" data-k="">حسب الشهر</button><button class="chip${txAll?' on':''}" data-act="txAll" data-k="1">كل العمليات</button></div>
+  ${txAll?`<div class="card" style="margin-bottom:12px"><div class="row" style="margin-top:0"><div><label for="txFrom" style="margin-top:0">من تاريخ</label><input type="date" id="txFrom" value="${txFrom}"></div><div><label for="txTo" style="margin-top:0">إلى تاريخ</label><input type="date" id="txTo" value="${txTo}"></div></div>
+  <div class="row" style="align-items:center"><b>${list.length} عملية</b><span class="in" style="direction:ltr;text-align:center">+${fmt(sumKind(base,'income'))}</span><span class="out" style="direction:ltr;text-align:center">−${fmt(sumKind(base,'expense'))} ${dispCur}</span>${txFrom||txTo?'<button class="btn sm" data-act="txClear">مسح التاريخ</button>':''}</div></div>`:`<div class="card mon"><button data-act="prevM" aria-label="الشهر السابق">›</button><b>${list.length} عملية</b><button data-act="nextM" aria-label="الشهر التالي">‹</button></div>`}
   <div class="chips">${[['all','الكل'],['expense','مصاريف'],['income','دخل'],['transfer','تحويلات']].map(([k,l])=>`<button class="chip${txFilter===k?' on':''}" data-act="txf" data-k="${k}">${l}</button>`).join('')}</div>
-  <div class="list">${list.map(txRow).join('')||'<div class="empty">ما في عمليات بهالشهر. اضغط ＋ لتضيف أول عملية.</div>'}</div>`;
+  <div class="list">${list.map(txRow).join('')||'<div class="empty">ما في عمليات هون. اضغط ＋ لتضيف عملية.</div>'}</div>`;
 }
 function vAcc(){
   return`<h2>الحسابات <span><button class="btn sm" data-act="transfer">🔁 تحويل</button> <button class="btn sm pri" data-act="addAcc">＋ حساب</button></span></h2>
@@ -220,6 +222,7 @@ function render(){
   <nav class="nav"><div>${nav.map(([k,i,l])=>`<button class="${view===k?'on':''}" data-act="nav" data-v="${k}"><em>${i}</em>${l}</button>`).join('')}</div></nav>`;
   const dc=$('#dispCur');if(dc)dc.onchange=()=>{dispCur=dc.value;render()};
   const sf=$('#setf');if(sf)sf.onsubmit=saveSettings;
+  const tf=$('#txFrom'),tt=$('#txTo');if(tf){tf.onchange=()=>{txFrom=tf.value;render()};tt.onchange=()=>{txTo=tt.value;render()}}
   if(view==='more'&&sub==='reports')drawCharts();
 }
 function drawCharts(){
@@ -288,6 +291,8 @@ const A={
   toggleHide(){hide=!hide;render()},
   toggleDark(){const d=document.documentElement,n=d.dataset.theme==='dark'?'light':'dark';d.dataset.theme=n;try{localStorage.setItem('ft_theme',n)}catch(e){}render()},
   txf(d){txFilter=d.k;render()},
+  txAll(d){txAll=!!d.k;render()},
+  txClear(){txFrom='';txTo='';render()},
   dtab(d){debtTab=d.k;render()},
   refresh(){refresh()},
   editName(){sheet('تغيير الاسم',fI('الاسم يلي بيظهر بالترحيب','display_name','text',S.profile.display_name,'maxlength="40" required'),o=>q(sb.from('ft_profiles').update({display_name:o.display_name.trim()}).eq('user_id',U.id)))},
