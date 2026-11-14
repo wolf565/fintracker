@@ -146,17 +146,22 @@ function renderAuth(msg=''){
 }
 
 /* ---------- views ---------- */
+const periodTx=()=>txAll?S.tx.filter(t=>(!txFrom||t.occurred_on>=txFrom)&&(!txTo||t.occurred_on<=txTo)):monthTx();
+function periodBar(){
+  return`<div class="chips" style="margin-bottom:8px"><button class="chip${txAll?'':' on'}" data-act="txAll" data-k="">حسب الشهر</button><button class="chip${txAll?' on':''}" data-act="txAll" data-k="1">كل العمليات</button></div>
+  ${txAll?`<div class="card" style="margin-bottom:12px"><div class="row" style="margin-top:0"><div><label for="txFrom" style="margin-top:0">من تاريخ</label><input type="date" id="txFrom" value="${txFrom}"></div><div><label for="txTo" style="margin-top:0">إلى تاريخ</label><input type="date" id="txTo" value="${txTo}"></div></div>${txFrom||txTo?'<div class="row" style="margin-top:10px"><button class="btn sm" data-act="txClear">مسح التاريخ (عرض الكل)</button></div>':''}</div>`:`<div class="card mon"><button data-act="prevM" aria-label="الشهر السابق">›</button><b>${MONTHS[month.getMonth()]} ${month.getFullYear()}</b><button data-act="nextM" aria-label="الشهر التالي">‹</button></div>`}`;
+}
 function greet(){const h=new Date().getHours();return h<12?'صباح الخير':h<18?'مرحباً':'مساء الخير'}
 function vHome(){
-  const total=S.accounts.reduce((s,a)=>s+conv(balance(a),a.currency,dispCur),0),m=monthTx();
+  const total=S.accounts.reduce((s,a)=>s+conv(balance(a),a.currency,dispCur),0),m=periodTx();
   const cats=S.categories.filter(c=>c.kind==='expense');
   return`<div class="hero"><div class="top"><button class="hi" data-act="editName" title="تغيير الاسم">${greet()}، <u>${esc(S.profile.display_name||'صديقي')}</u> ✎</button>
   <div class="ic"><button data-act="toggleHide" aria-label="إخفاء الأرصدة">${hide?'🙈':'👁'}</button><button data-act="toggleDark" aria-label="الوضع الليلي">🌙</button></div></div>
   <small>الرصيد الإجمالي</small><div class="bal"><b>${fmt(total)}</b><select id="dispCur" aria-label="العملة">${opts(curs(),dispCur)}</select></div></div>
-  <div class="card mon"><button data-act="prevM" aria-label="الشهر السابق">›</button><b>${MONTHS[month.getMonth()]} ${month.getFullYear()}</b><button data-act="nextM" aria-label="الشهر التالي">‹</button></div>
+  ${periodBar()}
   <div class="g2"><button class="card stat" data-act="addTx" data-kind="expense" style="text-align:start"><span>المصاريف</span><b class="out">${fmt(sumKind(m,'expense'))}</b></button>
   <button class="card stat" data-act="addTx" data-kind="income" style="text-align:start"><span>الدخل</span><b class="in">${fmt(sumKind(m,'income'))}</b></button></div>
-  <div class="g2">${cats.map(c=>{const sp=catSpent(c.id),b=S.budgets.find(x=>x.category_id===c.id),lim=b?conv(b.amount,b.currency,dispCur):0,pc=lim?Math.min(100,sp/lim*100):0;
+  <div class="g2">${cats.map(c=>{const sp=m.filter(t=>t.kind==='expense'&&t.category_id===c.id).reduce((x,t)=>x+conv(t.amount,txCur(t),dispCur),0),b=txAll?null:S.budgets.find(x=>x.category_id===c.id),lim=b?conv(b.amount,b.currency,dispCur):0,pc=lim?Math.min(100,sp/lim*100):0;
     return`<button class="card cat" data-act="addTx" data-kind="expense" data-cat="${c.id}"><i style="background:${esc(c.color)}22">${esc(c.icon)}</i><div><span>${esc(c.name)}</span><b>${fmt(sp)} ${dispCur}</b>${b?`<div class="bar${sp>lim?' over':''}"><s style="width:${pc}%"></s></div>`:''}</div></button>`}).join('')}
   <button class="card cat" data-act="addCat"><i>＋</i><div><span>تصنيف جديد</span></div></button></div>`;
 }
@@ -166,11 +171,10 @@ function txRow(t){
   return`<button class="card item" data-act="editTx" data-id="${t.id}"><i style="background:${esc(c?.color||'#8a8f98')}22">${esc(c?.icon||'•')}</i><div><span>${esc(t.note||c?.name||(t.kind==='income'?'دخل':'مصروف'))}</span><small>${t.occurred_on} • ${esc(a?.name)}${c?' • '+esc(c.name):''}${t.source==='telegram'?' • تلغرام':''}</small></div><b class="${t.kind==='income'?'in':'out'}">${t.kind==='income'?'+':'−'}${fmt(t.amount)} ${a?.currency||''}</b></button>`;
 }
 function vTx(){
-  const base=txAll?S.tx.filter(t=>(!txFrom||t.occurred_on>=txFrom)&&(!txTo||t.occurred_on<=txTo)):monthTx(),list=base.filter(t=>txFilter==='all'||t.kind===txFilter);
-  return`<h2>العمليات <span style="font-size:14px;color:var(--mut)">${txAll?'كل الفترات':MONTHS[month.getMonth()]+' '+month.getFullYear()}</span></h2>
-  <div class="chips"><button class="chip${txAll?'':' on'}" data-act="txAll" data-k="">حسب الشهر</button><button class="chip${txAll?' on':''}" data-act="txAll" data-k="1">كل العمليات</button></div>
-  ${txAll?`<div class="card" style="margin-bottom:12px"><div class="row" style="margin-top:0"><div><label for="txFrom" style="margin-top:0">من تاريخ</label><input type="date" id="txFrom" value="${txFrom}"></div><div><label for="txTo" style="margin-top:0">إلى تاريخ</label><input type="date" id="txTo" value="${txTo}"></div></div>
-  <div class="row" style="align-items:center"><b>${list.length} عملية</b><span class="in" style="direction:ltr;text-align:center">+${fmt(sumKind(base,'income'))}</span><span class="out" style="direction:ltr;text-align:center">−${fmt(sumKind(base,'expense'))} ${dispCur}</span>${txFrom||txTo?'<button class="btn sm" data-act="txClear">مسح التاريخ</button>':''}</div></div>`:`<div class="card mon"><button data-act="prevM" aria-label="الشهر السابق">›</button><b>${list.length} عملية</b><button data-act="nextM" aria-label="الشهر التالي">‹</button></div>`}
+  const base=periodTx(),list=base.filter(t=>txFilter==='all'||t.kind===txFilter);
+  return`<h2>العمليات <span style="font-size:14px;color:var(--mut)">${list.length} عملية</span></h2>
+  ${periodBar()}
+  <div class="sum"><span class="in">+${fmt(sumKind(base,'income'))}</span><span class="out">−${fmt(sumKind(base,'expense'))}</span><span>${dispCur}</span></div>
   <div class="chips">${[['all','الكل'],['expense','مصاريف'],['income','دخل'],['transfer','تحويلات']].map(([k,l])=>`<button class="chip${txFilter===k?' on':''}" data-act="txf" data-k="${k}">${l}</button>`).join('')}</div>
   <div class="list">${list.map(txRow).join('')||'<div class="empty">ما في عمليات هون. اضغط ＋ لتضيف عملية.</div>'}</div>`;
 }
